@@ -2,6 +2,45 @@
 
 Starting from v2.2.5, all notable changes to this project will be documented in this file.
 
+## v4.5.0
+
+### Release Notes
+
+This release expands **protocol interoperability, deployment security, and visualization capabilities**, highlighted by a built-in **Winston Wave Server**, embedded **vector map tiles**, and additional **spectrogram color schemes**.
+
+The Winston service allows Earthworm-compatible clients and tools such as Swarm to query waveform data directly from AnyShake Observer. Recent data is served from a configurable in-memory ring buffer for low-latency access, while older requests fall back to archived database records. This release also strengthens WebSocket authentication, improves NTP throughput, and refines earthquake event handling throughout the application.
+
+### New Features
+
+- Added a built-in **Winston Wave Server protocol** service for compatibility with Earthworm-based clients and seismic analysis tools such as Swarm.
+- Added a configurable **Winston waveform ring buffer**, retaining 10 minutes of recent data by default for fast short-period queries and falling back to archived database records when needed.
+- Replaced raster map assets with embedded **vector map tiles**, improving map rendering flexibility and reducing frontend asset overhead.
+- Added more **spectrogram color map schemes** for both real-time and historical waveform views.
+- Added display of actual estimated **P-wave and S-wave arrival times** in earthquake event details.
+- Added **settings tab persistence**, restoring the previously selected tab when returning to the settings page.
+- Added county-level descriptions for supported Taiwan earthquake events instead of displaying raw coordinates.
+- Added additional **systemd security hardening** and filesystem isolation options to the bundled service unit.
+
+### Improvements
+
+- Improved **NTP server throughput** with larger UDP buffers, bounded packet queues, and concurrent request workers.
+- Migrated the logging backend to **zerolog** for more consistent and efficient structured logging.
+- Moved WebSocket credentials out of URL query parameters and into the **WebSocket subprotocol header**, reducing accidental token exposure.
+- Improved earthquake event caching with typed caches and synchronized refresh behavior to prevent duplicate upstream requests under load.
+- Updated the **Sichuan Earthquake Administration** data source to use the Wolfx API.
+- Improved historical event lookup by storing event results as keyed objects and refining event selection behavior.
+- Refined spectrogram interactions, modal layouts, and frontend event handling for better usability.
+
+### Bug Fixes
+
+- Fixed WebSocket connection failures in **Google Chrome** caused by authentication subprotocol handling.
+- Fixed cache stampedes during concurrent seismic event queries.
+- Fixed **CENC earthquake data source** parsing and availability issues.
+- Fixed helicorder channel selection when channel order differs from the global station configuration.
+- Fixed incorrect channel-code index matching in plot data processing.
+- Fixed settings pages initializing with the wrong active tab.
+- Fixed several earthquake event list and modal data consistency issues.
+
 ## v4.4.0
 
 ### Release Notes
