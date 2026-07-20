@@ -66,9 +66,9 @@ func (s *frpClientConfigServerAddrImpl) GetNamespace() string        { return ID
 func (s *frpClientConfigServerAddrImpl) GetKey() string              { return "server_addr" }
 func (s *frpClientConfigServerAddrImpl) GetType() action.SettingType { return action.String }
 func (s *frpClientConfigServerAddrImpl) IsRequired() bool            { return true }
-func (s *frpClientConfigServerAddrImpl) GetVersion() int             { return 0 }
+func (s *frpClientConfigServerAddrImpl) GetVersion() int             { return 1 }
 func (s *frpClientConfigServerAddrImpl) GetOptions() map[string]any  { return nil }
-func (s *frpClientConfigServerAddrImpl) GetDefaultValue() any        { return "anyshake.ip-ddns.com" }
+func (s *frpClientConfigServerAddrImpl) GetDefaultValue() any        { return "anyshake.observer" }
 func (s *frpClientConfigServerAddrImpl) GetDescription() string {
 	return "The address of the FRP server to connect to."
 }
@@ -76,6 +76,15 @@ func (s *frpClientConfigServerAddrImpl) Init(handler *action.Handler) error {
 	if _, err := handler.SettingsInit(s.GetNamespace(), s.GetKey(), s.GetType(), s.GetVersion(), s.GetDefaultValue()); err != nil {
 		return fmt.Errorf("failed to set default FRP client server address: %w", err)
 	}
+
+	if currentVal, _, ver, err := handler.SettingsGet(s.GetNamespace(), s.GetKey());
+	// migrate to new domain
+	err == nil && ver == 0 && currentVal == "anyshake.ip-ddns.com" {
+		if err = s.Set(handler, s.GetDefaultValue()); err != nil {
+			return fmt.Errorf("failed to migrate server address: %w", err)
+		}
+	}
+
 	return nil
 }
 func (s *frpClientConfigServerAddrImpl) Set(handler *action.Handler, newVal any) error {

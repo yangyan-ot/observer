@@ -12,10 +12,12 @@ import Icon from '@mdi/react';
 import { createRef, RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
+import type { ColorMapName } from 'spectrogram-js';
 import { FFTExecutor } from 'spectrogram-js';
 
 import { DequeChart, DequeChartHandle } from '../../components/chart/DequeChart';
 import { DequeSpectrogram, DequeSpectrogramHandle } from '../../components/chart/DequeSpectrogram';
+import { DEFAULT_SPECTROGRAM_COLOR_MAP } from '../../components/chart/spectrogramColorMaps';
 import { DraggableBox } from '../../components/ui/DraggableBox';
 import { Banner } from '../../components/widget/Banner';
 import { RealTimeConstraints } from '../../config/constraints';
@@ -163,7 +165,10 @@ const RealTime = () => {
                             ? RealTimeConstraints.minWidth * 2
                             : RealTimeConstraints.minHeight
                 },
-                spectrogram: { ...RealTimeConstraints.getDynamicDB(index) }
+                spectrogram: {
+                    ...RealTimeConstraints.getDynamicDB(index),
+                    colorMap: DEFAULT_SPECTROGRAM_COLOR_MAP
+                }
             };
         },
         [config]
@@ -246,14 +251,16 @@ const RealTime = () => {
 
     const handleSpectrogramUpdate = useThrottleFnTrailing(
         useCallback(
-            (channel: string, index: number, minDB: number, maxDB: number) => {
+            (
+                channel: string,
+                index: number,
+                minDB: number,
+                maxDB: number,
+                colorMap: ColorMapName
+            ) => {
                 setLayoutConfig(channel, {
                     ...getInitialLayout(channel, index),
-                    spectrogram: {
-                        ...getInitialLayout(channel, index).spectrogram,
-                        maxDB,
-                        minDB
-                    }
+                    spectrogram: { maxDB, minDB, colorMap }
                 });
             },
             [getInitialLayout, setLayoutConfig]
@@ -440,15 +447,17 @@ const RealTime = () => {
                                         windowSize={RealTimeConstraints.windowSize}
                                         maxDB={initialLayout.spectrogram.maxDB}
                                         minDB={initialLayout.spectrogram.minDB}
+                                        colorMap={initialLayout.spectrogram.colorMap}
                                         ref={spectrogramRefs.current[channel]}
                                         fftExecutor={sharedFFTExecutor}
                                         sampleRate={sampleRate}
-                                        onSpectrogramUpdate={(minDB, maxDB) =>
+                                        onSpectrogramUpdate={(minDB, maxDB, colorMap) =>
                                             handleSpectrogramUpdate(
                                                 activeChannels[channel].id,
                                                 activeChannels[channel].index,
                                                 minDB,
-                                                maxDB
+                                                maxDB,
+                                                colorMap
                                             )
                                         }
                                     />

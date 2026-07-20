@@ -5,19 +5,10 @@ import { useTranslation } from 'react-i18next';
 import type { ColorMapName, FFTExecutor } from 'spectrogram-js';
 import { Spectrogram as SpectrogramCore } from 'spectrogram-js';
 
-const COLOR_MAPS: ColorMapName[] = [
-    'viridis',
-    'inferno',
-    'grayscale',
-    'jet',
-    'hot',
-    'cool',
-    'spring',
-    'summer',
-    'autumn',
-    'winter',
-    'bone'
-];
+import {
+    DEFAULT_SPECTROGRAM_COLOR_MAP,
+    SPECTROGRAM_COLOR_MAPS
+} from './spectrogramColorMaps';
 
 interface ISpectrogram {
     readonly title?: string;
@@ -47,7 +38,7 @@ export const Spectrogram = memo(
         windowSize,
         overlap,
         data,
-        colorMap = COLOR_MAPS[3],
+        colorMap = DEFAULT_SPECTROGRAM_COLOR_MAP,
         fftExecutor,
         renderFPS = 2,
         zoomStep = 0.2,
@@ -104,8 +95,8 @@ export const Spectrogram = memo(
 
             const ro = new ResizeObserver(([entry]) => {
                 const { width, height } = entry.contentRect;
-                sizeRef.current.width = Math.max(1, Math.floor(width));
-                sizeRef.current.height = Math.max(1, Math.floor(height));
+                sizeRef.current.width = Math.max(0, Math.floor(width));
+                sizeRef.current.height = Math.max(0, Math.floor(height));
             });
 
             ro.observe(canvas.parentElement);
@@ -146,26 +137,37 @@ export const Spectrogram = memo(
             });
         }, [dataDuration, freqRange, initializedSpectrogram, timePercent, zoomDuration]);
 
+        const pendingRenderRef = useRef<number | null>(null);
+        const requestSpectrogramRender = useCallback(() => {
+            if (pendingRenderRef.current !== null) {
+                return;
+            }
+            pendingRenderRef.current = requestAnimationFrame(() => {
+                pendingRenderRef.current = null;
+                renderSpectrogram();
+            });
+        }, [renderSpectrogram]);
+
+        useEffect(
+            () => () => {
+                if (pendingRenderRef.current !== null) {
+                    cancelAnimationFrame(pendingRenderRef.current);
+                    pendingRenderRef.current = null;
+                }
+            },
+            [requestSpectrogramRender]
+        );
+
         useEffect(() => {
             if (!initializedSpectrogram) {
                 return;
             }
 
-            let rafId: number;
-            let lastRenderTime = 0;
             const frameInterval = 1000 / renderFPS;
-
-            const renderLoop = (now: number) => {
-                rafId = requestAnimationFrame(renderLoop);
-                if (now - lastRenderTime < frameInterval) {
-                    return;
-                }
-                lastRenderTime = now;
-                renderSpectrogram();
-            };
-            rafId = requestAnimationFrame(renderLoop);
-            return () => cancelAnimationFrame(rafId);
-        }, [initializedSpectrogram, renderFPS, renderSpectrogram]);
+            const intervalId = window.setInterval(requestSpectrogramRender, frameInterval);
+            requestSpectrogramRender();
+            return () => window.clearInterval(intervalId);
+        }, [initializedSpectrogram, renderFPS, requestSpectrogramRender]);
 
         useEffect(() => {
             if (!initializedSpectrogram || spectrogramRef.current !== initializedSpectrogram) {
@@ -173,10 +175,8 @@ export const Spectrogram = memo(
             }
 
             initializedSpectrogram.setData(data);
-            requestAnimationFrame(() => {
-                renderSpectrogram();
-            });
-        }, [data, initializedSpectrogram, renderSpectrogram]);
+            requestSpectrogramRender();
+        }, [data, initializedSpectrogram, requestSpectrogramRender]);
 
         useEffect(() => {
             if (!initializedSpectrogram || spectrogramRef.current !== initializedSpectrogram) {
@@ -184,10 +184,8 @@ export const Spectrogram = memo(
             }
 
             initializedSpectrogram.setColormap(colormap);
-            requestAnimationFrame(() => {
-                renderSpectrogram();
-            });
-        }, [colormap, initializedSpectrogram, renderSpectrogram]);
+            requestSpectrogramRender();
+        }, [colormap, initializedSpectrogram, requestSpectrogramRender]);
 
         const handlePreviewMinDB = useCallback((value: number) => {
             setMinDBState(value);
@@ -222,9 +220,9 @@ export const Spectrogram = memo(
         );
 
         const handleToggleColormap = useCallback(() => {
-            const currentIndex = COLOR_MAPS.indexOf(colormap);
-            const nextIndex = (currentIndex + 1) % COLOR_MAPS.length;
-            const next = COLOR_MAPS[nextIndex];
+            const currentIndex = SPECTROGRAM_COLOR_MAPS.indexOf(colormap);
+            const nextIndex = (currentIndex + 1) % SPECTROGRAM_COLOR_MAPS.length;
+            const next = SPECTROGRAM_COLOR_MAPS[nextIndex];
             setColormap(next);
             onSpectrogramUpdate?.(minDBState, maxDBState, next);
         }, [colormap, maxDBState, minDBState, onSpectrogramUpdate]);
