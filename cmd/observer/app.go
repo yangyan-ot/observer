@@ -49,6 +49,7 @@ import (
 	service_seedlink "github.com/anyshake/observer/internal/service/seedlink"
 	service_updater "github.com/anyshake/observer/internal/service/updater"
 	service_watchcat "github.com/anyshake/observer/internal/service/watchcat"
+	service_winston "github.com/anyshake/observer/internal/service/winston"
 )
 
 func getExecutablePath() (string, error) {
@@ -209,6 +210,7 @@ func appStart(ver *semver.Version, build *unibuild.UniBuild, args arguments) {
 		service_quakesense.ID: service_quakesense.New(hardwareDevice, actionHandler, timeSrc),
 		service_seedlink.ID:   service_seedlink.New(hardwareDevice, actionHandler, timeSrc),
 		service_watchcat.ID:   service_watchcat.New(hardwareDevice, timeSrc),
+		service_winston.ID:    service_winston.New(hardwareDevice, actionHandler, timeSrc),
 		service_discovery.ID:  service_discovery.New(conf.Server.Listen, actionHandler, timeSrc),
 	}
 	var upgradeHelper *upgrade.Helper

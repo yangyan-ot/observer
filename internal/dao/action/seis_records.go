@@ -8,6 +8,10 @@ import (
 	"github.com/anyshake/observer/internal/dao/model"
 )
 
+func (h *Handler) SeisRecordsGetQueryWindow() time.Duration {
+	return time.Hour
+}
+
 func (h *Handler) SeisRecordsCreate(records ...model.SeisRecord) error {
 	if h.daoObj == nil {
 		return errors.New("database is not opened")
@@ -40,8 +44,9 @@ func (h *Handler) SeisRecordsQuery(startTime, endTime time.Time) ([]model.SeisRe
 		return nil, errors.New("start time is after end time")
 	}
 
-	if endTime.Sub(startTime) > time.Hour {
-		return nil, errors.New("duration between start time and end time exceeds 1 hour limit")
+	queryWindowLimit := h.SeisRecordsGetQueryWindow()
+	if endTime.Sub(startTime) > queryWindowLimit {
+		return nil, fmt.Errorf("duration between start time and end time exceeds %.0f minutes limit", queryWindowLimit.Minutes())
 	}
 
 	var records []model.SeisRecord

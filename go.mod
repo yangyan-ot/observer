@@ -8,14 +8,15 @@ require (
 	github.com/alphadose/haxmap v1.4.1
 	github.com/ameshkov/dnscrypt/v2 v2.4.0
 	github.com/appleboy/gin-jwt/v2 v2.10.1
-	github.com/bclswl0827/eewgo v0.1.0
+	github.com/bclswl0827/eewgo v0.1.1
 	github.com/bclswl0827/go-serial v0.0.1
 	github.com/bclswl0827/heligo v0.2.0
-	github.com/bclswl0827/mseedio v1.1.1
+	github.com/bclswl0827/mseedio v1.2.0
 	github.com/bclswl0827/sacio v1.0.6
-	github.com/bclswl0827/slgo v0.2.4
+	github.com/bclswl0827/slgo v0.3.0
 	github.com/bclswl0827/sqlite v1.11.1-0.20240613172512-9e6ac9861470
-	github.com/bclswl0827/travel v0.0.0-20250920120530-2f1b6e10e7ae
+	github.com/bclswl0827/travel v0.0.1
+	github.com/bclswl0827/winsgo v0.0.0-20260719153703-3c070ca8c966
 	github.com/beevik/ntp v1.5.0
 	github.com/bwmarrin/snowflake v0.3.0
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be
@@ -42,7 +43,7 @@ require (
 	github.com/ncruces/go-sqlite3/gormlite v0.24.0
 	github.com/paulmach/orb v0.13.0
 	github.com/rs/zerolog v1.35.0
-	github.com/samber/lo v1.51.0
+	github.com/samber/lo v1.53.0
 	github.com/sbabiv/xml2map v1.2.1
 	github.com/shirou/gopsutil/v4 v4.25.1
 	github.com/spf13/viper v1.19.0
@@ -106,7 +107,6 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/clbanning/anyxml v1.2.2 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect
 	github.com/coreos/go-oidc/v3 v3.14.1 // indirect
 	github.com/ebitengine/purego v0.8.3 // indirect

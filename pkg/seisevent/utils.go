@@ -85,14 +85,14 @@ func getSeismicEstimation(table *travel.AK135, lat1, lat2, lng1, lng2, depth flo
 
 	if result.P != nil {
 		estObj.P_Wave = result.P.Duration.Seconds()
-	} else if result.PKPdf != nil {
-		estObj.P_Wave = result.PKPdf.Duration.Seconds()
+	} else if result.PKIKP != nil {
+		estObj.P_Wave = result.PKIKP.Duration.Seconds()
 	}
 
 	if result.S != nil {
 		estObj.S_Wave = result.S.Duration.Seconds()
-	} else if result.SKSdf != nil {
-		estObj.S_Wave = result.SKSdf.Duration.Seconds()
+	} else if result.SKIKS != nil {
+		estObj.S_Wave = result.SKIKS.Duration.Seconds()
 	}
 
 	return estObj

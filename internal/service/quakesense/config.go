@@ -524,10 +524,10 @@ func (s *quakeSenseConfigTriggerMethodImpl) GetType() action.SettingType { retur
 func (s *quakeSenseConfigTriggerMethodImpl) IsRequired() bool            { return true }
 func (s *quakeSenseConfigTriggerMethodImpl) GetOptions() map[string]any {
 	return map[string]any{
-		"Classic STA/LTA": CLASSIC_STA_LTA,
-		// "Recursive STA/LTA": RECURSIVE_STA_LTA,
-		// "Delayed STA/LTA":   DELAYED_STA_LTA,
-		"Z-Detect": Z_DETECT,
+		"Classic STA/LTA":   CLASSIC_STA_LTA,
+		"Recursive STA/LTA": RECURSIVE_STA_LTA,
+		"Delayed STA/LTA":   DELAYED_STA_LTA,
+		"Z-Detect":          Z_DETECT,
 	}
 }
 func (s *quakeSenseConfigTriggerMethodImpl) GetVersion() int      { return 0 }
