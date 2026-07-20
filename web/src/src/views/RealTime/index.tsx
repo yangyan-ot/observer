@@ -249,7 +249,11 @@ const RealTime = () => {
             (channel: string, index: number, minDB: number, maxDB: number) => {
                 setLayoutConfig(channel, {
                     ...getInitialLayout(channel, index),
-                    spectrogram: { maxDB, minDB }
+                    spectrogram: {
+                        ...getInitialLayout(channel, index).spectrogram,
+                        maxDB,
+                        minDB
+                    }
                 });
             },
             [getInitialLayout, setLayoutConfig]

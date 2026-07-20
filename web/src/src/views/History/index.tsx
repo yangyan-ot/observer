@@ -16,6 +16,7 @@ import * as _countryFlags from 'country-flag-icons/string/3x2';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
+import type { ColorMapName } from 'spectrogram-js';
 import { FFTExecutor } from 'spectrogram-js';
 
 import { LineChart } from '../../components/chart/LineChart';
@@ -435,7 +436,10 @@ const History = ({ currentLocale }: IRouterComponent) => {
                             ? HistoryConstraints.minWidth * 2
                             : HistoryConstraints.minHeight
                 },
-                spectrogram: { ...HistoryConstraints.getDynamicDB(index) }
+                spectrogram: {
+                    ...HistoryConstraints.getDynamicDB(index),
+                    colorMap: 'jet' as const
+                }
             };
         },
         [config]
@@ -480,10 +484,16 @@ const History = ({ currentLocale }: IRouterComponent) => {
 
     const handleSpectrogramUpdate = useThrottleFnTrailing(
         useCallback(
-            (channel: string, index: number, minDB: number, maxDB: number) => {
+            (
+                channel: string,
+                index: number,
+                minDB: number,
+                maxDB: number,
+                colorMap: ColorMapName
+            ) => {
                 setLayoutConfig(channel, {
                     ...getInitialLayout(channel, index),
-                    spectrogram: { maxDB, minDB }
+                    spectrogram: { maxDB, minDB, colorMap }
                 });
             },
             [getInitialLayout, setLayoutConfig]
@@ -830,6 +840,7 @@ const History = ({ currentLocale }: IRouterComponent) => {
                                         windowSize={HistoryConstraints.windowSize}
                                         maxDB={initialLayout.spectrogram.maxDB}
                                         minDB={initialLayout.spectrogram.minDB}
+                                        colorMap={initialLayout.spectrogram.colorMap}
                                         fftExecutor={sharedFFTExecutor}
                                         data={
                                             chartData[channel]
@@ -839,12 +850,13 @@ const History = ({ currentLocale }: IRouterComponent) => {
                                                 : []
                                         }
                                         sampleRate={sampleRate}
-                                        onSpectrogramUpdate={(minDB, maxDB) =>
+                                        onSpectrogramUpdate={(minDB, maxDB, colorMap) =>
                                             handleSpectrogramUpdate(
                                                 activeChannels[channel].id,
                                                 activeChannels[channel].index,
                                                 minDB,
-                                                maxDB
+                                                maxDB,
+                                                colorMap
                                             )
                                         }
                                     />

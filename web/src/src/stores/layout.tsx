@@ -1,3 +1,4 @@
+import type { ColorMapName } from 'spectrogram-js';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
@@ -9,7 +10,7 @@ const layoutStoreKey = 'layout-store';
 type LayoutConfig = {
     readonly position: { x: number; y: number };
     readonly size: { width: number; height: number };
-    readonly spectrogram: { maxDB: number; minDB: number };
+    readonly spectrogram: { maxDB: number; minDB: number; colorMap?: ColorMapName };
 };
 
 interface ILayout {

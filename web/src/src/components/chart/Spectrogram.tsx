@@ -2,7 +2,22 @@ import { mdiClose, mdiCog, mdiMagnifyMinus, mdiMagnifyPlus } from '@mdi/js';
 import Icon from '@mdi/react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FFTExecutor, Spectrogram as SpectrogramCore } from 'spectrogram-js';
+import type { ColorMapName, FFTExecutor } from 'spectrogram-js';
+import { Spectrogram as SpectrogramCore } from 'spectrogram-js';
+
+const COLOR_MAPS: ColorMapName[] = [
+    'viridis',
+    'inferno',
+    'grayscale',
+    'jet',
+    'hot',
+    'cool',
+    'spring',
+    'summer',
+    'autumn',
+    'winter',
+    'bone'
+];
 
 interface ISpectrogram {
     readonly title?: string;
@@ -14,10 +29,11 @@ interface ISpectrogram {
     readonly windowSize: number;
     readonly overlap: number;
     readonly data: [number, number][];
+    readonly colorMap?: ColorMapName;
     readonly fftExecutor?: FFTExecutor;
     readonly renderFPS?: number;
     readonly zoomStep?: number;
-    readonly onSpectrogramUpdate?: (minDB: number, maxDB: number) => void;
+    readonly onSpectrogramUpdate?: (minDB: number, maxDB: number, colorMap: ColorMapName) => void;
 }
 
 export const Spectrogram = memo(
@@ -31,6 +47,7 @@ export const Spectrogram = memo(
         windowSize,
         overlap,
         data,
+        colorMap = COLOR_MAPS[3],
         fftExecutor,
         renderFPS = 2,
         zoomStep = 0.2,
@@ -42,10 +59,13 @@ export const Spectrogram = memo(
         const [minDBState, setMinDBState] = useState(minDB);
         const [maxDBState, setMaxDBState] = useState(maxDB);
         const [zoomDuration, setZoomDuration] = useState(duration);
+        const [colormap, setColormap] = useState<ColorMapName>(colorMap);
 
-        const [initialized, setInitialized] = useState(false);
+        const [initializedSpectrogram, setInitializedSpectrogram] =
+            useState<SpectrogramCore | null>(null);
         const spectrogramRef = useRef<SpectrogramCore | null>(null);
         useEffect(() => {
+            setInitializedSpectrogram(null);
             const sp = new SpectrogramCore({
                 sampleRate,
                 windowSize,
@@ -57,14 +77,22 @@ export const Spectrogram = memo(
             });
             spectrogramRef.current = sp;
             sp.init().then(() => {
-                sp.setColormap('jet');
-                setInitialized(true);
+                if (spectrogramRef.current !== sp) {
+                    return;
+                }
+                setInitializedSpectrogram(sp);
             });
             return () => {
                 sp.destroy();
-                spectrogramRef.current = null;
+                if (spectrogramRef.current === sp) {
+                    spectrogramRef.current = null;
+                }
             };
         }, [fftExecutor, maxDB, minDB, overlap, sampleRate, windowSize]);
+
+        useEffect(() => {
+            setColormap(colorMap);
+        }, [colorMap]);
 
         const canvasRef = useRef<HTMLCanvasElement>(null);
         const sizeRef = useRef({ width: 1, height: 1 });
@@ -92,8 +120,34 @@ export const Spectrogram = memo(
             return (data[data.length - 1][0] - data[0][0]) / 1000;
         }, [data]);
 
+        const renderSpectrogram = useCallback(() => {
+            const canvas = canvasRef.current;
+            const sp = spectrogramRef.current;
+            if (!canvas || !sp || initializedSpectrogram !== sp) {
+                return;
+            }
+
+            const { width, height } = sizeRef.current;
+            if (width <= 0 || height <= 0) {
+                return;
+            }
+
+            const total = dataDuration ?? 0;
+            const window = zoomDuration;
+            const maxStart = Math.max(0, total - window);
+            const start = maxStart * timePercent;
+            const end = start + window;
+            sp.render({
+                canvas,
+                width,
+                height,
+                timeRange: [start, end],
+                freqRange
+            });
+        }, [dataDuration, freqRange, initializedSpectrogram, timePercent, zoomDuration]);
+
         useEffect(() => {
-            if (!initialized) {
+            if (!initializedSpectrogram) {
                 return;
             }
 
@@ -107,39 +161,33 @@ export const Spectrogram = memo(
                     return;
                 }
                 lastRenderTime = now;
-                const canvas = canvasRef.current;
-                const sp = spectrogramRef.current;
-                if (!canvas || !sp) {
-                    return;
-                }
-
-                const { width, height } = sizeRef.current;
-                if (width <= 0 || height <= 0) {
-                    return;
-                }
-
-                const total = dataDuration ?? 0;
-                const window = zoomDuration;
-                const maxStart = Math.max(0, total - window);
-                const start = maxStart * timePercent;
-                const end = start + window;
-                sp.render({
-                    canvas,
-                    width,
-                    height,
-                    timeRange: [start, end],
-                    freqRange
-                });
+                renderSpectrogram();
             };
             rafId = requestAnimationFrame(renderLoop);
             return () => cancelAnimationFrame(rafId);
-        }, [dataDuration, duration, freqRange, initialized, renderFPS, timePercent, zoomDuration]);
+        }, [initializedSpectrogram, renderFPS, renderSpectrogram]);
 
         useEffect(() => {
-            if (initialized) {
-                spectrogramRef.current?.setData(data);
+            if (!initializedSpectrogram || spectrogramRef.current !== initializedSpectrogram) {
+                return;
             }
-        }, [data, initialized]);
+
+            initializedSpectrogram.setData(data);
+            requestAnimationFrame(() => {
+                renderSpectrogram();
+            });
+        }, [data, initializedSpectrogram, renderSpectrogram]);
+
+        useEffect(() => {
+            if (!initializedSpectrogram || spectrogramRef.current !== initializedSpectrogram) {
+                return;
+            }
+
+            initializedSpectrogram.setColormap(colormap);
+            requestAnimationFrame(() => {
+                renderSpectrogram();
+            });
+        }, [colormap, initializedSpectrogram, renderSpectrogram]);
 
         const handlePreviewMinDB = useCallback((value: number) => {
             setMinDBState(value);
@@ -152,9 +200,9 @@ export const Spectrogram = memo(
                     minDb: value,
                     maxDb: Math.max(value, maxDBState)
                 });
-                onSpectrogramUpdate?.(value, Math.max(value, maxDBState));
+                onSpectrogramUpdate?.(value, Math.max(value, maxDBState), colormap);
             },
-            [maxDBState, onSpectrogramUpdate, spectrogramRef]
+            [colormap, maxDBState, onSpectrogramUpdate, spectrogramRef]
         );
 
         const handlePreviewMaxDB = useCallback((value: number) => {
@@ -168,10 +216,18 @@ export const Spectrogram = memo(
                     minDb: Math.min(value, minDBState),
                     maxDb: value
                 });
-                onSpectrogramUpdate?.(Math.min(value, minDBState), value);
+                onSpectrogramUpdate?.(Math.min(value, minDBState), value, colormap);
             },
-            [minDBState, onSpectrogramUpdate, spectrogramRef]
+            [colormap, minDBState, onSpectrogramUpdate, spectrogramRef]
         );
+
+        const handleToggleColormap = useCallback(() => {
+            const currentIndex = COLOR_MAPS.indexOf(colormap);
+            const nextIndex = (currentIndex + 1) % COLOR_MAPS.length;
+            const next = COLOR_MAPS[nextIndex];
+            setColormap(next);
+            onSpectrogramUpdate?.(minDBState, maxDBState, next);
+        }, [colormap, maxDBState, minDBState, onSpectrogramUpdate]);
 
         const handleZoomIn = useCallback(() => {
             if (dataDuration) {
@@ -207,6 +263,13 @@ export const Spectrogram = memo(
                         onClick={() => setShowSettings((v) => !v)}
                     >
                         <Icon path={mdiCog} size={0.7} />
+                    </button>
+
+                    <button
+                        className="flex h-6 min-w-12 flex-shrink-0 cursor-pointer items-center justify-center rounded bg-black/50 px-2 text-xs font-semibold text-white opacity-50 transition-all hover:opacity-100"
+                        onClick={handleToggleColormap}
+                    >
+                        {colormap}
                     </button>
 
                     <button
