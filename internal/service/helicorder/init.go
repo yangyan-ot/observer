@@ -40,6 +40,29 @@ func (s *HelicorderServiceImpl) Init() error {
 	}
 	s.filePath = filePath.(string)
 
+	cacheStorage, err := (&helicorderConfigCacheStorageImpl{}).Get(s.dataProvider.actionHandler)
+	if err != nil {
+		return fmt.Errorf("failed to get helicorder cache storage: %w", err)
+	}
+	s.cacheStorage = cacheStorage.(string)
+
+	cachePath, err := (&helicorderConfigCachePathImpl{}).Get(s.dataProvider.actionHandler)
+	if err != nil {
+		return fmt.Errorf("failed to get helicorder cache path: %w", err)
+	}
+	s.cachePath = cachePath.(string)
+
+	queryCache, err := newQueryCache(s.cacheStorage, s.cachePath)
+	if err != nil {
+		return fmt.Errorf("failed to initialize helicorder cache: %w", err)
+	}
+	if queryCache != nil {
+		if err := queryCache.Clear(); err != nil {
+			return fmt.Errorf("failed to clear stale helicorder cache: %w", err)
+		}
+	}
+	s.dataProvider.queryCache = queryCache
+
 	imageFormat, err := (&helicorderConfigImageFormatImpl{}).Get(s.dataProvider.actionHandler)
 	if err != nil {
 		return fmt.Errorf("failed to get helicorder image format: %w", err)

@@ -5,28 +5,24 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"runtime/debug"
 	"time"
 
 	"github.com/anyshake/observer/config"
 	"github.com/anyshake/observer/internal/dao/action"
 	"github.com/anyshake/observer/internal/hardware/explorer"
-	"github.com/anyshake/observer/pkg/cache"
 	"github.com/anyshake/observer/pkg/logger"
 	"github.com/bclswl0827/heligo"
 	"github.com/samber/lo"
 )
 
-type queryCacheData struct {
-	sampleRate  int
-	timestamp   int64
-	channelData []explorer.ChannelData
-}
+// Keep the number of concurrently retained plot spans small. Each worker can
+// hold the source samples, normalized samples and rendered points for a span.
+const plotWorkers = 2
 
 type provider struct {
 	actionHandler *action.Handler
-	queryCache    cache.KvCache[[]queryCacheData]
+	queryCache    queryCache
 
 	stationCode  string
 	networkCode  string
@@ -41,49 +37,114 @@ func (d *provider) GetNetwork() string  { return d.networkCode }
 func (d *provider) GetChannel() string  { return d.channelCode }
 func (d *provider) GetLocation() string { return d.locationCode }
 func (d *provider) GetPlotData(startTime, endTime time.Time) ([]heligo.PlotData, error) {
-	startTimestamp := startTime.Add(-time.Second) // Also used as key of cache
+	startTimestamp := startTime.Add(-time.Second)
 	endTimestamp := endTime.Add(time.Second)
-	cacheData, found := d.queryCache.Get(startTimestamp)
+	cacheKey := queryCacheKey{
+		StartUnixMilli: startTimestamp.UnixMilli(),
+		EndUnixMilli:   endTimestamp.UnixMilli(),
+	}
 
-	var seisRecords []queryCacheData
-	if found {
-		seisRecords = cacheData
-	} else {
-		records, err := d.actionHandler.SeisRecordsQuery(startTimestamp, endTimestamp)
+	if d.queryCache != nil {
+		var plotData []heligo.PlotData
+		found, err := d.queryCache.Read(cacheKey, d.channelCode, func(sampleRate int, timestamp int64, samples []int32) {
+			plotData = appendChannelSamples(plotData, sampleRate, timestamp, samples)
+		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to query seismic waveform records: %w", err)
+			logger.GetLogger(ID).Warnf("failed to read waveform cache for timestamp %d, falling back to database: %v", cacheKey.StartUnixMilli, err)
+		} else if found {
+			return plotData, nil
 		}
-		seisRecords = make([]queryCacheData, len(records))
-		for idx, record := range records {
-			_, sampleRate, channelData, err := record.Decode()
-			if err != nil {
-				return nil, fmt.Errorf("failed to decode seismic waveform record on timestamp %d: %w", record.RecordTime, err)
-			}
-			seisRecords[idx].sampleRate = sampleRate
-			seisRecords[idx].channelData = channelData
-			seisRecords[idx].timestamp = record.RecordTime
-		}
-		d.queryCache.Set(startTimestamp, seisRecords)
+	}
+
+	records, err := d.actionHandler.SeisRecordsQuery(startTimestamp, endTimestamp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query seismic waveform records: %w", err)
 	}
 
 	var plotData []heligo.PlotData
-	for _, record := range seisRecords {
-		data := make([]heligo.PlotData, record.sampleRate)
-		for i := range record.sampleRate {
-			record.channelData = lo.Filter(record.channelData, func(item explorer.ChannelData, _ int) bool {
-				return item.ChannelCode == d.channelCode
-			})
-			if len(record.channelData) > 0 {
-				timeOffset := int64(i * 1000 / record.sampleRate)
-				data[i].Time = time.UnixMilli(record.timestamp + timeOffset)
-				data[i].Value = float64(record.channelData[0].Data[i])
+	var cacheWriter queryCacheWriter
+	if d.queryCache != nil {
+		cacheWriter, err = d.queryCache.NewWriter(cacheKey)
+		if err != nil {
+			logger.GetLogger(ID).Warnf("failed to create waveform cache for timestamp %d: %v", cacheKey.StartUnixMilli, err)
+		}
+	}
+	for _, record := range records {
+		_, sampleRate, channelData, err := record.Decode()
+		if err != nil {
+			if cacheWriter != nil {
+				cacheWriter.Abort()
+			}
+			return nil, fmt.Errorf("failed to decode seismic waveform record on timestamp %d: %w", record.RecordTime, err)
+		}
+		plotData = appendChannelPlotData(plotData, sampleRate, record.RecordTime, channelData, d.channelCode)
+		if cacheWriter != nil {
+			if err := cacheWriter.Write(queryCacheData{
+				SampleRate:  sampleRate,
+				Timestamp:   record.RecordTime,
+				ChannelData: channelData,
+			}); err != nil {
+				logger.GetLogger(ID).Warnf("failed to write waveform cache for timestamp %d: %v", cacheKey.StartUnixMilli, err)
+				cacheWriter.Abort()
+				cacheWriter = nil
 			}
 		}
-		plotData = append(plotData, data...)
+	}
+
+	if cacheWriter != nil {
+		if err := cacheWriter.Commit(); err != nil {
+			logger.GetLogger(ID).Warnf("failed to commit waveform cache for timestamp %d: %v", cacheKey.StartUnixMilli, err)
+		}
 	}
 
 	return plotData, nil
 }
+
+func appendChannelPlotData(
+	plotData []heligo.PlotData,
+	sampleRate int,
+	timestamp int64,
+	channelData []explorer.ChannelData,
+	channelCode string,
+) []heligo.PlotData {
+	if sampleRate <= 0 {
+		return plotData
+	}
+
+	var samples []int32
+	for i := range channelData {
+		if channelData[i].ChannelCode == channelCode {
+			samples = channelData[i].Data
+			break
+		}
+	}
+	if len(samples) == 0 {
+		return plotData
+	}
+	return appendChannelSamples(plotData, sampleRate, timestamp, samples)
+}
+
+func appendChannelSamples(plotData []heligo.PlotData, sampleRate int, timestamp int64, samples []int32) []heligo.PlotData {
+	if sampleRate <= 0 || len(samples) == 0 {
+		return plotData
+	}
+
+	// A partial record is still useful. Limiting the count also avoids a panic
+	// when malformed input declares a sample rate larger than its data slice.
+	sampleCount := min(sampleRate, len(samples))
+	start := len(plotData)
+	plotData = append(plotData, make([]heligo.PlotData, sampleCount)...)
+	for i := range sampleCount {
+		timeOffset := int64(i * 1000 / sampleRate)
+		plotData[start+i] = heligo.PlotData{
+			Time:  time.UnixMilli(timestamp + timeOffset),
+			Value: float64(samples[i]),
+		}
+	}
+
+	return plotData
+}
+
 func (d *provider) setChannelCode(channelCode string) {
 	d.channelCode = channelCode
 }
@@ -110,6 +171,10 @@ func (s *HelicorderServiceImpl) Start() error {
 	}
 
 	logger.GetLogger(ID).Infof("generated helicorder images will be saved to %s", s.filePath)
+	logger.GetLogger(ID).Infof("helicorder waveform cache storage: %s", s.cacheStorage)
+	if s.cacheStorage == CACHE_STORAGE_DISK {
+		logger.GetLogger(ID).Infof("helicorder waveform cache path: %s", s.cachePath)
+	}
 
 	go func() {
 		timer := time.NewTimer(time.Minute)
@@ -159,7 +224,7 @@ func (s *HelicorderServiceImpl) Start() error {
 					s.dataProvider.setChannelCode(channelCode)
 					logger.GetLogger(ID).Infof("start plotting helicorder for channel %s", channelCode)
 
-					if err = helicorderCtx.Plot(currentTime, runtime.NumCPU()*4, s.spanSamples, scaleFactor, s.lineWidth, nil); err != nil {
+					if err = helicorderCtx.Plot(currentTime, plotWorkers, s.spanSamples, scaleFactor, s.lineWidth, nil); err != nil {
 						logger.GetLogger(ID).Errorf("failed to plot helicorder for %s: %v", channelCode, err)
 						continue
 					}
@@ -180,8 +245,15 @@ func (s *HelicorderServiceImpl) Start() error {
 					logger.GetLogger(ID).Infof("helicorder for %s has been saved to %s", channelCode, filePath)
 				}
 
-				s.dataProvider.queryCache.Clear()
-				runtime.GC()
+				if s.dataProvider.queryCache != nil {
+					if err := s.dataProvider.queryCache.Clear(); err != nil {
+						logger.GetLogger(ID).Warnf("failed to clear waveform cache: %v", err)
+					}
+				}
+
+				// Plotting has a deliberately short-lived, comparatively large working set.
+				// Return it to the OS after the hourly batch has completed.
+				debug.FreeOSMemory()
 
 				if s.lifeCycle > 0 {
 					endTime := currentTime.Add(time.Duration(-s.lifeCycle) * time.Hour * 24)

@@ -2,6 +2,7 @@ package helicorder
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -13,19 +14,24 @@ func (s *HelicorderServiceImpl) Stop() error {
 	s.status.SetIsRunning(false)
 	s.cancelFn()
 
-	done := make(chan struct{})
+	done := make(chan error, 1)
 	go func() {
-		s.dataProvider.queryCache.Clear()
 		s.wg.Wait()
-		close(done)
+		if s.dataProvider.queryCache != nil {
+			if err := s.dataProvider.queryCache.Clear(); err != nil {
+				done <- fmt.Errorf("failed to clear helicorder cache: %w", err)
+				return
+			}
+		}
+		done <- nil
 	}()
 
 	timer := time.NewTimer(10 * time.Second)
 	defer timer.Stop()
 
 	select {
-	case <-done:
-		return nil
+	case err := <-done:
+		return err
 	case <-timer.C:
 		return errors.New("timeout waiting for goroutines to finish")
 	}

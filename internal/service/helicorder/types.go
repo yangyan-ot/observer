@@ -22,6 +22,13 @@ const (
 	TIMESPAN_30_MINUTES int64 = 30
 )
 
+const (
+	CACHE_STORAGE_DISABLED = "disabled"
+	CACHE_STORAGE_DISK     = "disk"
+	CACHE_STORAGE_MEMORY   = "memory"
+	CACHE_DEFAULT_PATH     = "./service_data/helicorder/.helicorder-cache"
+)
+
 type HelicorderServiceImpl struct {
 	mu     sync.Mutex
 	status service.Status
@@ -34,8 +41,10 @@ type HelicorderServiceImpl struct {
 	hardwareDev  hardware.IHardware
 	dataProvider provider
 
-	filePath    string
-	imageFormat string
+	filePath     string
+	imageFormat  string
+	cacheStorage string
+	cachePath    string
 
 	timeSpan     int
 	lifeCycle    int
